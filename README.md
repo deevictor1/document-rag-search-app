@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RAG Search
 
-## Getting Started
+RAG Search lets you ask questions about uploaded PDF, DOCX, and TXT files. It retrieves relevant passages from those files and uses them as context for an AI-generated answer, with source passages shown alongside the response.
 
-First, run the development server:
+## Technologies
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js App Router, React, TypeScript, and Tailwind CSS
+- Supabase Storage for original files and Supabase Postgres with pgvector for chunk text and embeddings
+- OpenAI embeddings (`text-embedding-3-small`) and chat completions (`gpt-4o-mini`)
+- Browser Speech Recognition for voice questions and browser Speech Synthesis for reading answers aloud (browser support varies)
+
+## Architecture
+
+The browser handles the interface and optional voice input/output. Voice recognition produces ordinary text; it then follows the same search path as a typed question. The server API retrieves document chunks from Supabase and asks OpenAI to compose an answer. The answer and matched source passages return to the browser.
+
+```mermaid
+flowchart LR
+  U[User] -->|typed question or speech| FE[Next.js frontend]
+  FE -->|SpeechRecognition in browser| SR[Browser speech service]
+  SR -->|recognized text| FE
+  FE -->|POST /api/search| RAG[Next.js RAG API]
+  RAG -->|embed question| EMB[OpenAI embeddings]
+  EMB --> RAG
+  RAG -->|vector similarity: match_documents| VDB[(Supabase Postgres + pgvector)]
+  VDB -->|top matching chunks| RAG
+  RAG -->|context + question| LLM[OpenAI chat model]
+  LLM -->|answer| RAG
+  RAG -->|answer + source chunks| FE
+  FE -->|optional spoken answer| TTS[Browser SpeechSynthesis]
+
+  UP[Upload] --> FE
+  FE -->|POST /api/upload| ING[Text extraction + chunking]
+  ING -->|original file| STORE[(Supabase Storage)]
+  ING -->|text chunks + embeddings| VDB
+  FE <-->|list, view, download, delete| DOCS[Next.js /api/documents]
+  DOCS <--> VDB
+  DOCS <--> STORE
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Run locally
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Requirements: Node.js, an OpenAI API key, and a Supabase project configured with a `documents` Storage bucket, a `documents` table containing chunk content, metadata, and embeddings, and a `match_documents` Postgres function for vector search.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Install dependencies with `npm install`.
+2. Copy `.env.example` to `.env.local` and fill in your values.
+3. Start the development server with `npm run dev`.
+4. Open [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+Environment variables:
 
-To learn more about Next.js, take a look at the following resources:
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL.
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`: Supabase publishable/anon key.
+- `SUPABASE_SERVICE_ROLE_KEY`: optional server-side key used for Storage operations when row-level security requires it. Keep it private.
+- `OPENAI_API_KEY`: server-side OpenAI key.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Never commit `.env.local` or real credentials. The `.env.example` file contains placeholders only.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Error handling
 
-## Deploy on Vercel
+API routes return JSON with an `error` message when an operation fails, and use HTTP error status codes for common failures. Upload reports file parsing, storage, and database errors; document operations report missing files/documents and database errors; search reports retrieval or OpenAI errors. The UI displays search and list errors, upload feedback, and voice-recognition issues such as blocked microphone access, no detected speech, or an unavailable browser speech service. Browser speech recognition availability and network requirements depend on the browser.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment and access
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Do not deploy this as a public service until authentication, authorization, and request/usage limits are in place. The current API routes do not authenticate callers, so a public deployment could allow others to use your OpenAI account and access or modify stored documents. Configure secrets in the hosting provider’s environment settings; do not put them in Git.
