@@ -2,6 +2,14 @@
 
 RAG Search lets you ask questions about uploaded PDF, DOCX, and TXT files. It retrieves relevant passages from those files and uses them as context for an AI-generated answer, with source passages shown alongside the response.
 
+## Screenshots
+
+![RAG Search app screenshot](app/documents/screenshot-image.png)
+
+![RAG Search app screenshot](app/documents/screenshot-image-2.png)
+
+![RAG Search app screenshot](app/documents/screenshot-image-3.png)
+
 ## Technologies
 
 - Next.js App Router, React, TypeScript, and Tailwind CSS
